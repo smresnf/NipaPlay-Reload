@@ -28,7 +28,7 @@ jobs:
     if: inputs.release_tag == '' && inputs.artifact_run_id == ''
     uses: ./.github/workflows/build-macos.yml
     with:
-      architectures: '["universal"]'
+      architectures: '["arm64"]'
       unsigned: true
 
   existing-build:

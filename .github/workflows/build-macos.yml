@@ -410,6 +410,7 @@ jobs:
   compatibility:
     name: Run packaged app on macOS 15
     needs: build
+    if: contains(fromJSON(inputs.architectures), 'universal')
     uses: ./.github/workflows/smoke-macos.yml
     with:
       unsigned: ${{ inputs.unsigned }}
