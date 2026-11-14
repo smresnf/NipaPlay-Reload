@@ -162,6 +162,8 @@ private let macOSHdrExitTraceEnabled =
     ProcessInfo.processInfo.environment["NIPAPLAY_MACOS_HDR_EXIT_TRACE"] == "1"
 private let macOSNativeVideoDebugLabelsEnabled =
     ProcessInfo.processInfo.environment["NIPAPLAY_MACOS_NATIVE_VIDEO_DEBUG_LABELS"] == "1"
+private let macOSFlutterTransparencyOverride =
+    ProcessInfo.processInfo.environment["NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER"]
 
 private func macOSHdrExitTrace(_ message: String) {
     guard macOSHdrExitTraceEnabled else {
@@ -210,9 +212,13 @@ final class MacOSWindowNativeVideoOverlayView: NSView, MacOSNativeVideoSurfaceHo
     private var videoRenderer: MediaKitOpenGLVideoRenderer?
     private var attachedPlayerHandle: Int64?
     private var overlayFrameGeneration: Int64?
+    private let drawsBelowFlutter: Bool
+    private weak var transparentFlutterController: FlutterViewController?
+    private var previousFlutterBackground: NSColor?
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
+    init(drawsBelowFlutter: Bool) {
+        self.drawsBelowFlutter = drawsBelowFlutter
+        super.init(frame: .zero)
         installBaseLayer()
         layerContentsRedrawPolicy = .duringViewResize
         isHidden = true
@@ -238,7 +244,17 @@ final class MacOSWindowNativeVideoOverlayView: NSView, MacOSNativeVideoSurfaceHo
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if !isHidden {
+            showVideoThroughFlutter()
+        }
         videoRenderer?.hostViewDidChange()
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow !== window {
+            restoreFlutterBackground()
+        }
+        super.viewWillMove(toWindow: newWindow)
     }
 
     override func viewDidChangeBackingProperties() {
@@ -263,6 +279,9 @@ final class MacOSWindowNativeVideoOverlayView: NSView, MacOSNativeVideoSurfaceHo
         }
         videoRenderer = renderer
         attachedPlayerHandle = handle
+        if !isHidden {
+            showVideoThroughFlutter()
+        }
         renderer.hostViewDidChange()
     }
 
@@ -271,6 +290,7 @@ final class MacOSWindowNativeVideoOverlayView: NSView, MacOSNativeVideoSurfaceHo
         videoRenderer?.detach()
         videoRenderer = nil
         attachedPlayerHandle = nil
+        restoreFlutterBackground()
         installBaseLayer()
     }
 
@@ -312,6 +332,7 @@ final class MacOSWindowNativeVideoOverlayView: NSView, MacOSNativeVideoSurfaceHo
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             isHidden = true
+            restoreFlutterBackground()
             CATransaction.commit()
             return
         }
@@ -321,10 +342,34 @@ final class MacOSWindowNativeVideoOverlayView: NSView, MacOSNativeVideoSurfaceHo
         if self.frame != frame {
             self.frame = frame.integral
         }
+        showVideoThroughFlutter()
         isHidden = false
         videoRenderer?.layer.frame = bounds
         CATransaction.commit()
         videoRenderer?.hostViewDidChange()
+    }
+
+    private func showVideoThroughFlutter() {
+        guard drawsBelowFlutter,
+              macOSFlutterTransparencyOverride != "0",
+              transparentFlutterController == nil,
+              let controller = window?.nipaplayFlutterViewController else {
+            return
+        }
+        // The video and Flutter views are siblings inside the same window.
+        // Only the Flutter view needs alpha to reveal the video underneath.
+        previousFlutterBackground = controller.backgroundColor ?? .black
+        transparentFlutterController = controller
+        controller.backgroundColor = .clear
+    }
+
+    private func restoreFlutterBackground() {
+        if let controller = transparentFlutterController,
+           let background = previousFlutterBackground {
+            controller.backgroundColor = background
+        }
+        transparentFlutterController = nil
+        previousFlutterBackground = nil
     }
 
     private func installBaseLayer() {
@@ -781,7 +826,9 @@ final class MacOSNativeVideoPlugin: NSObject, FlutterPlugin {
 
         let overlayHost = windowHostedOverlay ??
             hostWindow.nipaplayNativeVideoOverlayHost ??
-            MacOSWindowNativeVideoOverlayView(frame: .zero)
+            MacOSWindowNativeVideoOverlayView(
+                drawsBelowFlutter: !shouldPlaceWindowHostedOverlayAboveFlutter()
+            )
         let previousWindow = overlayHost.window
 
         if overlayHost.superview !== hostSuperview {
@@ -1588,6 +1635,6 @@ class MainFlutterWindow: NSWindow {
        environment["NIPAPLAY_DISABLE_MACOS_WINDOW_OVERLAY"] == "1" {
       return false
     }
-    return environment["NIPAPLAY_MACOS_HDR_TRANSPARENT_FLUTTER"] != "0"
+    return macOSFlutterTransparencyOverride == "1"
   }
 }
