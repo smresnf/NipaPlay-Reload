@@ -597,7 +597,7 @@ void main(List<String> args) async {
               '1';
       WindowOptions windowOptions = WindowOptions(
         skipTaskbar: false,
-        titleBarStyle: TitleBarStyle.hidden,
+        titleBarStyle: Platform.isMacOS ? null : TitleBarStyle.hidden,
         backgroundColor:
             transparentWindowBackground ? Colors.transparent : null,
         title: "NipaPlay",

@@ -1580,10 +1580,16 @@ class MainFlutterWindow: NSWindow {
       nibName: nil,
       bundle: nil
     )
+    // window_manager's title-bar setter marks the entire window non-opaque.
+    titleVisibility = .hidden
+    titlebarAppearsTransparent = true
+    styleMask.insert(.fullSizeContentView)
     if Self.shouldUseTransparentFlutterSurface() {
-      self.isOpaque = false
-      self.backgroundColor = NSColor.clear
-      flutterViewController.backgroundColor = NSColor.clear
+      isOpaque = false
+      backgroundColor = .clear
+      flutterViewController.backgroundColor = .clear
+    } else {
+      isOpaque = true
     }
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
